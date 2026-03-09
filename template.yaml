@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: MCP server for GPT app - user info and loan info tools
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, prod)
+
+Resources:
+  McpServerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub gpt-mcp-server-${Stage}
+      Handler: handler.lambda_handler
+      CodeUri: src/
+      Metadata:
+        BuildMethod: python3.12
+      Description: MCP server exposing get_user_info and retrieve_loan_info for GPT
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+      Events:
+        McpApi:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: ANY
+            ApiId: !Ref McpHttpApi
+
+  McpHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub gpt-mcp-api-${Stage}
+      Description: HTTP API for MCP server (Streamable HTTP) - use this URL in GPT
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - "*"
+
+Outputs:
+  McpApiUrl:
+    Description: MCP server URL - use this as server_url in OpenAI Responses API (GPT)
+    Value: !Sub https://${McpHttpApi}.execute-api.${AWS::Region}.amazonaws.com/mcp
+    Export:
+      Name: !Sub ${AWS::StackName}-McpApiUrl
+  McpServerFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt McpServerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FunctionArn
