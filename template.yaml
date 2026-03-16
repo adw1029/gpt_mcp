@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: MCP server for GPT app - user info and loan info tools
+Description: MCP server for GPT app - user info, loan info, and document extraction tools
 
 Globals:
   Function:
@@ -15,18 +15,117 @@ Parameters:
     Description: Deployment stage (dev, prod)
 
 Resources:
+  LoanOverviewTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub gpt-mcp-loan-overview-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: loan_id
+          AttributeType: S
+        - AttributeName: guid
+          AttributeType: S
+      KeySchema:
+        - AttributeName: loan_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: guid-index
+          KeySchema:
+            - AttributeName: guid
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ClientProfileTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub gpt-mcp-client-profile-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: borrower_id
+          AttributeType: S
+        - AttributeName: loan_id
+          AttributeType: S
+        - AttributeName: guid
+          AttributeType: S
+        - AttributeName: borrower_last_name
+          AttributeType: S
+        - AttributeName: borrower_first_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: borrower_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: loan_id-index
+          KeySchema:
+            - AttributeName: loan_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: guid-index
+          KeySchema:
+            - AttributeName: guid
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: name-index
+          KeySchema:
+            - AttributeName: borrower_last_name
+              KeyType: HASH
+            - AttributeName: borrower_first_name
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  LoanDocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub gpt-mcp-loan-documents-${Stage}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: upload.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedMethods: [GET, POST]
+            AllowedHeaders: ["*"]
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireUploadsAfter7Days
+            Status: Enabled
+            Prefix: uploads/
+            ExpirationInDays: 7
+
+  LoanDocumentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoanDocumentsBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub ${LoanDocumentsBucket.Arn}/upload.html
+
   McpServerFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub gpt-mcp-server-${Stage}
       Handler: handler.lambda_handler
       CodeUri: src/
-      Metadata:
-        BuildMethod: python3.12
-      Description: MCP server exposing get_user_info and retrieve_loan_info for GPT
+      Description: MCP server exposing get_loan_overview, lookup_loan_document_extraction, and get_client_profile for GPT
+      Role: arn:aws:iam::730784326723:role/PrajnaMicroAgent_Lambda_Execution_Role
       Environment:
         Variables:
           STAGE: !Ref Stage
+          LOAN_OVERVIEW_TABLE: !Ref LoanOverviewTable
+          CLIENT_PROFILE_TABLE: !Ref ClientProfileTable
+          LOAN_DOCUMENTS_BUCKET: !Ref LoanDocumentsBucket
       Events:
         McpApi:
           Type: HttpApi
@@ -61,3 +160,23 @@ Outputs:
     Value: !GetAtt McpServerFunction.Arn
     Export:
       Name: !Sub ${AWS::StackName}-FunctionArn
+  LoanOverviewTableName:
+    Description: DynamoDB table name for loan overview records
+    Value: !Ref LoanOverviewTable
+    Export:
+      Name: !Sub ${AWS::StackName}-LoanOverviewTable
+  ClientProfileTableName:
+    Description: DynamoDB table name for client profile records
+    Value: !Ref ClientProfileTable
+    Export:
+      Name: !Sub ${AWS::StackName}-ClientProfileTable
+  LoanDocumentsBucketName:
+    Description: S3 bucket for loan document uploads
+    Value: !Ref LoanDocumentsBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-LoanDocumentsBucket
+  LoanDocumentsBucketWebsiteUrl:
+    Description: S3 static website URL for the upload page
+    Value: !GetAtt LoanDocumentsBucket.WebsiteURL
+    Export:
+      Name: !Sub ${AWS::StackName}-LoanDocumentsBucketWebsiteUrl

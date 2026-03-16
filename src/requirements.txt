@@ -1,2 +1,2 @@
 # Used by SAM build when packaging Lambda (copy from root or keep in sync)
-awslabs.mcp-lambda-handler>=0.1.12
+awslabs.mcp-lambda-handler>=0.1.14

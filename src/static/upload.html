@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loan Document Upload</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px;
+      width: 100%;
+      max-width: 480px;
+    }
+    .logo { font-size: 28px; margin-bottom: 8px; }
+    h1 { font-size: 20px; color: #1a1a2e; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 28px; }
+    .meta { background: #f0f4ff; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 14px; color: #333; }
+    .meta span { font-weight: 600; color: #2563eb; }
+    .drop-zone {
+      border: 2px dashed #c7d2fe;
+      border-radius: 10px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 20px;
+      background: #fafbff;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #2563eb; background: #eff6ff; }
+    .drop-zone .icon { font-size: 36px; margin-bottom: 10px; }
+    .drop-zone p { color: #555; font-size: 14px; }
+    .drop-zone .hint { color: #999; font-size: 12px; margin-top: 6px; }
+    #file-input { display: none; }
+    .file-chosen { background: #f0fdf4; border-color: #86efac; }
+    .file-chosen p { color: #166534; font-weight: 500; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #1d4ed8; }
+    .btn:disabled { background: #93c5fd; cursor: not-allowed; }
+    .status { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 14px; display: none; }
+    .status.success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; display: block; }
+    .status.error   { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; display: block; }
+    .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
+    .progress { width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; margin-top: 12px; overflow: hidden; display: none; }
+    .progress-bar { height: 100%; background: #2563eb; width: 0; transition: width 0.3s; }
+    .expire { text-align: center; font-size: 12px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">📄</div>
+    <h1>Loan Document Upload</h1>
+    <p class="subtitle">Securely upload a PDF to your loan file</p>
+
+    <div class="meta" id="meta-info">Loading loan details...</div>
+
+    <div class="drop-zone" id="drop-zone">
+      <div class="icon">☁️</div>
+      <p>Drag & drop your PDF here</p>
+      <p class="hint">or click to browse files</p>
+      <input type="file" id="file-input" accept="application/pdf">
+    </div>
+
+    <button class="btn" id="upload-btn" disabled>Upload Document</button>
+
+    <div class="progress" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="status" id="status"></div>
+    <p class="expire" id="expire-note"></p>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const loanId = params.get("loan_id");
+    const fileName = params.get("filename");
+    const expiresIn = parseInt(params.get("expires_in") || "300", 10);
+
+    // Reconstruct presigned POST fields from query params (prefix "f_")
+    const fields = {};
+    for (const [k, v] of params.entries()) {
+      if (k.startsWith("f_")) fields[k.slice(2)] = v;
+    }
+
+    // Meta info
+    document.getElementById("meta-info").innerHTML =
+      `Loan ID: <span>${loanId || "—"}</span>&nbsp;&nbsp;File: <span>${fileName || "document.pdf"}</span>`;
+
+    // Expiry countdown
+    const expiresAt = Date.now() + expiresIn * 1000;
+    function updateExpiry() {
+      const secs = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+      const m = Math.floor(secs / 60), s = secs % 60;
+      document.getElementById("expire-note").textContent =
+        secs > 0 ? `Upload link expires in ${m}:${s.toString().padStart(2,"0")}` : "Upload link has expired. Please request a new one.";
+    }
+    updateExpiry();
+    setInterval(updateExpiry, 1000);
+
+    // Drag & drop
+    let selectedFile = null;
+    const dropZone = document.getElementById("drop-zone");
+    const fileInput = document.getElementById("file-input");
+    const uploadBtn = document.getElementById("upload-btn");
+
+    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      const f = e.dataTransfer.files[0];
+      if (f) setFile(f);
+    });
+    fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+    function setFile(f) {
+      selectedFile = f;
+      dropZone.classList.add("file-chosen");
+      dropZone.querySelector("p").textContent = `✅ ${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+      dropZone.querySelector(".hint").textContent = "Click to choose a different file";
+      uploadBtn.disabled = false;
+    }
+
+    // Upload
+    uploadBtn.addEventListener("click", async () => {
+      if (!selectedFile || !action) return;
+      uploadBtn.disabled = true;
+      const status = document.getElementById("status");
+      const progressWrap = document.getElementById("progress-wrap");
+      const progressBar = document.getElementById("progress-bar");
+      status.className = "status loading";
+      status.textContent = "Uploading...";
+      progressWrap.style.display = "block";
+
+      const formData = new FormData();
+      for (const [k, v] of Object.entries(fields)) formData.append(k, v);
+      formData.append("file", selectedFile);
+
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener("progress", e => {
+          if (e.lengthComputable) progressBar.style.width = (e.loaded / e.total * 100) + "%";
+        });
+        await new Promise((resolve, reject) => {
+          xhr.onload = () => xhr.status === 204 || xhr.status === 200 ? resolve() : reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+          xhr.onerror = () => reject(new Error("Network error"));
+          xhr.open("POST", action);
+          xhr.send(formData);
+        });
+        progressBar.style.width = "100%";
+        status.className = "status success";
+        status.textContent = `✅ Document uploaded successfully! Go back to your chat and tell the agent the upload is complete.`;
+      } catch (err) {
+        status.className = "status error";
+        status.textContent = `❌ Upload failed: ${err.message}`;
+        uploadBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
