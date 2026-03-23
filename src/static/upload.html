@@ -3,124 +3,472 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loan Document Upload</title>
+  <title>Document Upload</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f7fa;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: #f5f5f7;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 2rem;
+      -webkit-font-smoothing: antialiased;
     }
+
+    /* Expiry bar */
+    .expiry-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: #e8e8ed;
+      z-index: 100;
+    }
+    .expiry-fill {
+      height: 100%;
+      background: #0066cc;
+      width: 100%;
+      transition: width 1s linear, background 0.4s cubic-bezier(0.28, 0.11, 0.32, 1);
+      border-radius: 0 2px 2px 0;
+    }
+    .expiry-fill.warning { background: #f59e0b; }
+    .expiry-fill.expired { width: 0 !important; background: #dc2626; }
+
+    /* Card */
     .card {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-      padding: 40px;
+      background: #ffffff;
+      border-radius: 18px;
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
       width: 100%;
-      max-width: 480px;
+      max-width: 440px;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.28, 0.11, 0.32, 1);
     }
-    .logo { font-size: 28px; margin-bottom: 8px; }
-    h1 { font-size: 20px; color: #1a1a2e; margin-bottom: 4px; }
-    .subtitle { color: #666; font-size: 14px; margin-bottom: 28px; }
-    .meta { background: #f0f4ff; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 14px; color: #333; }
-    .meta span { font-weight: 600; color: #2563eb; }
-    .drop-zone {
-      border: 2px dashed #c7d2fe;
+
+    .card-body {
+      padding: 2rem 2rem 1.5rem;
+    }
+
+    /* Header */
+    .page-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1d1d1f;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+    .page-sub {
+      font-size: 14px;
+      color: #86868b;
+      margin-bottom: 1.5rem;
+      letter-spacing: -0.01em;
+    }
+
+    /* Loan info badge */
+    .loan-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f5f5f7;
+      border-radius: 980px;
+      padding: 6px 14px;
+      margin-bottom: 1.5rem;
+      font-size: 13px;
+    }
+    .loan-badge-icon { color: #86868b; font-size: 11px; }
+    .loan-badge-id { font-weight: 600; color: #1d1d1f; letter-spacing: -0.01em; }
+    .loan-badge-sep { color: #aeaeb2; }
+    .loan-badge-name { color: #86868b; }
+
+    /* Section label */
+    .section-label {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #86868b;
+      margin-bottom: 8px;
+    }
+
+    /* Segmented control */
+    .segmented {
+      display: flex;
+      background: #f5f5f7;
       border-radius: 10px;
-      padding: 36px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-bottom: 20px;
-      background: #fafbff;
+      padding: 2px;
+      margin-bottom: 1.5rem;
     }
-    .drop-zone:hover, .drop-zone.dragover { border-color: #2563eb; background: #eff6ff; }
-    .drop-zone .icon { font-size: 36px; margin-bottom: 10px; }
-    .drop-zone p { color: #555; font-size: 14px; }
-    .drop-zone .hint { color: #999; font-size: 12px; margin-top: 6px; }
-    #file-input { display: none; }
-    .file-chosen { background: #f0fdf4; border-color: #86efac; }
-    .file-chosen p { color: #166534; font-weight: 500; }
-    .btn {
-      width: 100%;
-      padding: 14px;
-      background: #2563eb;
-      color: white;
+    .seg-btn {
+      flex: 1;
+      background: transparent;
       border: none;
       border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      color: #86868b;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s cubic-bezier(0.28, 0.11, 0.32, 1);
+      letter-spacing: -0.01em;
     }
-    .btn:hover { background: #1d4ed8; }
-    .btn:disabled { background: #93c5fd; cursor: not-allowed; }
-    .status { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 14px; display: none; }
-    .status.success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; display: block; }
-    .status.error   { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; display: block; }
-    .status.loading { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; display: block; }
-    .progress { width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; margin-top: 12px; overflow: hidden; display: none; }
-    .progress-bar { height: 100%; background: #2563eb; width: 0; transition: width 0.3s; }
-    .expire { text-align: center; font-size: 12px; color: #999; margin-top: 16px; }
+    .seg-btn.active {
+      background: #ffffff;
+      color: #0066cc;
+      font-weight: 600;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    }
+    .seg-btn i { margin-right: 6px; font-size: 12px; }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 1.5px dashed rgba(0, 0, 0, 0.15);
+      border-radius: 12px;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.28, 0.11, 0.32, 1);
+      margin-bottom: 1rem;
+      background: #ffffff;
+    }
+    .drop-zone:hover {
+      border-color: #0066cc;
+      background: rgba(0, 102, 204, 0.03);
+    }
+    .drop-zone.dragover {
+      border-color: #0066cc;
+      border-style: solid;
+      background: rgba(0, 102, 204, 0.06);
+      transform: scale(1.01);
+    }
+    .drop-zone.file-chosen {
+      border-color: #16a34a;
+      border-style: solid;
+      background: rgba(22, 163, 74, 0.03);
+    }
+    #file-input { display: none; }
+
+    .drop-icon {
+      width: 44px;
+      height: 44px;
+      background: #f5f5f7;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 12px;
+      font-size: 18px;
+      color: #aeaeb2;
+      transition: all 0.3s cubic-bezier(0.28, 0.11, 0.32, 1);
+    }
+    .drop-zone:hover .drop-icon { background: rgba(0, 102, 204, 0.08); color: #0066cc; }
+    .drop-zone.file-chosen .drop-icon { background: rgba(22, 163, 74, 0.1); color: #16a34a; }
+
+    .drop-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: #1d1d1f;
+      letter-spacing: -0.01em;
+      margin-bottom: 3px;
+    }
+    .drop-sub { font-size: 13px; color: #86868b; }
+
+    /* File chip */
+    .file-chip {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: #f5f5f7;
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-top: 12px;
+      text-align: left;
+    }
+    .file-chip.visible { display: flex; }
+    .file-chip i { color: #dc2626; font-size: 16px; flex-shrink: 0; }
+    .file-chip-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1d1d1f;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-chip-size { font-size: 11px; color: #86868b; }
+
+    /* Primary button */
+    .btn-primary {
+      width: 100%;
+      background: #0066cc;
+      color: #ffffff;
+      border: none;
+      border-radius: 980px;
+      padding: 13px 1.5rem;
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.28, 0.11, 0.32, 1);
+    }
+    .btn-primary:hover:not(:disabled) { background: #0077ed; transform: translateY(-1px); }
+    .btn-primary:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+    .btn-primary:disabled {
+      background: #e8e8ed;
+      color: #aeaeb2;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-primary.done { background: #16a34a; }
+    .btn-primary.done:hover { background: #15803d; }
+
+    /* Progress */
+    .progress-track {
+      height: 2px;
+      background: #e8e8ed;
+      border-radius: 1px;
+      margin-top: 12px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .progress-track.visible { opacity: 1; }
+    .progress-fill {
+      height: 100%;
+      background: #0066cc;
+      width: 0;
+      transition: width 0.3s ease;
+      border-radius: 1px;
+    }
+    .progress-fill.done { background: #16a34a; }
+
+    /* Status */
+    .status-text {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #86868b;
+      letter-spacing: -0.01em;
+      min-height: 18px;
+      display: none;
+    }
+    .status-text.visible { display: block; }
+    .status-text.error { color: #dc2626; }
+    .status-text.success { color: #16a34a; }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: rgba(0, 0, 0, 0.06);
+      display: none;
+    }
+    .divider.visible { display: block; }
+
+    /* Verdict panel */
+    .verdict-panel {
+      padding: 1.5rem 2rem;
+      display: none;
+    }
+    .verdict-panel.visible { display: block; }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 980px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .status-badge.success { background: rgba(22, 163, 74, 0.1); color: #16a34a; }
+    .status-badge.error { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+    .status-badge.warning { background: rgba(245, 158, 11, 0.1); color: #d97706; }
+
+    .verdict-narrative {
+      font-size: 14px;
+      color: #86868b;
+      line-height: 1.5;
+      margin-bottom: 1rem;
+      letter-spacing: -0.01em;
+    }
+
+    /* Score */
+    .score-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 1rem;
+    }
+    .score-track {
+      flex: 1;
+      height: 4px;
+      background: #e8e8ed;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .score-fill {
+      height: 100%;
+      border-radius: 2px;
+      width: 0;
+      transition: width 0.7s cubic-bezier(0.28, 0.11, 0.32, 1);
+    }
+    .score-fill.success { background: #16a34a; }
+    .score-fill.warning { background: #f59e0b; }
+    .score-fill.error { background: #dc2626; }
+    .score-num {
+      font-size: 12px;
+      font-weight: 600;
+      color: #86868b;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      font-family: "SF Mono", Monaco, monospace;
+    }
+
+    /* Rules */
+    .rules { display: flex; flex-direction: column; }
+    .rule {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 13px;
+      letter-spacing: -0.01em;
+    }
+    .rule:last-child { border-bottom: none; }
+    .rule-name { color: #1d1d1f; }
+    .rule-pts {
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .rule-pts.pass { color: #16a34a; }
+    .rule-pts.fail { color: #aeaeb2; }
+
+    /* Footer */
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 2rem;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .footer-secure {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #aeaeb2;
+    }
+    .footer-expire { font-size: 12px; color: #aeaeb2; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
+  <div class="expiry-bar"><div class="expiry-fill" id="expiry-fill"></div></div>
+
   <div class="card">
-    <div class="logo">📄</div>
-    <h1>Loan Document Upload</h1>
-    <p class="subtitle">Securely upload a PDF to your loan file</p>
+    <div class="card-body">
 
-    <div class="meta" id="meta-info">Loading loan details...</div>
+      <div class="page-title">Document Upload</div>
+      <div class="page-sub">Rate · Secure Loan File Transfer</div>
 
-    <div class="drop-zone" id="drop-zone">
-      <div class="icon">☁️</div>
-      <p>Drag & drop your PDF here</p>
-      <p class="hint">or click to browse files</p>
-      <input type="file" id="file-input" accept="application/pdf">
+      <div class="loan-badge">
+        <i class="fa-solid fa-file-contract loan-badge-icon"></i>
+        <span class="loan-badge-id" id="info-loan-id">—</span>
+        <span class="loan-badge-sep">·</span>
+        <span class="loan-badge-name" id="info-borrower">—</span>
+      </div>
+
+      <div class="section-label">Document Type</div>
+      <div class="segmented">
+        <button class="seg-btn active" data-type="title" onclick="selectDocType(this)">
+          <i class="fa-solid fa-file-lines"></i>Title
+        </button>
+        <button class="seg-btn" data-type="insurance" onclick="selectDocType(this)">
+          <i class="fa-solid fa-shield-halved"></i>Insurance
+        </button>
+      </div>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon" id="drop-icon">
+          <i class="fa-solid fa-cloud-arrow-up" id="drop-fa-icon"></i>
+        </div>
+        <div class="drop-title" id="drop-title">Drop PDF here</div>
+        <div class="drop-sub" id="drop-sub">or click to browse files</div>
+        <div class="file-chip" id="file-chip">
+          <i class="fa-solid fa-file-pdf"></i>
+          <div>
+            <div class="file-chip-name" id="file-name"></div>
+            <div class="file-chip-size" id="file-size"></div>
+          </div>
+        </div>
+        <input type="file" id="file-input" accept="application/pdf">
+      </div>
+
+      <button class="btn-primary" id="upload-btn" disabled>Upload Document</button>
+
+      <div class="progress-track" id="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="status-text" id="status-text"></div>
     </div>
 
-    <button class="btn" id="upload-btn" disabled>Upload Document</button>
+    <div class="divider" id="verdict-divider"></div>
+    <div class="verdict-panel" id="verdict-panel"></div>
 
-    <div class="progress" id="progress-wrap">
-      <div class="progress-bar" id="progress-bar"></div>
+    <div class="card-footer">
+      <div class="footer-secure">
+        <i class="fa-solid fa-lock" style="font-size:10px"></i>
+        Encrypted · AWS S3
+      </div>
+      <div class="footer-expire" id="expire-text"></div>
     </div>
-    <div class="status" id="status"></div>
-    <p class="expire" id="expire-note"></p>
   </div>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const action = params.get("action");
-    const loanId = params.get("loan_id");
-    const fileName = params.get("filename");
-    const expiresIn = parseInt(params.get("expires_in") || "300", 10);
+    let session = null, selectedFile = null, selectedDocType = "title", expiresAtMs = 0;
 
-    // Reconstruct presigned POST fields from query params (prefix "f_")
-    const fields = {};
-    for (const [k, v] of params.entries()) {
-      if (k.startsWith("f_")) fields[k.slice(2)] = v;
+    function selectDocType(btn) {
+      document.querySelectorAll(".seg-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedDocType = btn.dataset.type;
     }
 
-    // Meta info
-    document.getElementById("meta-info").innerHTML =
-      `Loan ID: <span>${loanId || "—"}</span>&nbsp;&nbsp;File: <span>${fileName || "document.pdf"}</span>`;
-
-    // Expiry countdown
-    const expiresAt = Date.now() + expiresIn * 1000;
-    function updateExpiry() {
-      const secs = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
-      const m = Math.floor(secs / 60), s = secs % 60;
-      document.getElementById("expire-note").textContent =
-        secs > 0 ? `Upload link expires in ${m}:${s.toString().padStart(2,"0")}` : "Upload link has expired. Please request a new one.";
+    async function loadSession() {
+      const params = new URLSearchParams(window.location.search);
+      const sessionKey = params.get("session");
+      if (!sessionKey) { document.getElementById("info-loan-id").textContent = "No session"; return; }
+      const bucket = window.location.hostname.split(".")[0];
+      const region = window.location.hostname.match(/s3-website[.-]([^.]+)/)?.[1] || "us-east-2";
+      try {
+        const resp = await fetch(`https://${bucket}.s3.${region}.amazonaws.com/${sessionKey}`);
+        if (!resp.ok) throw new Error();
+        session = await resp.json();
+        document.getElementById("info-loan-id").textContent = session.loan_id;
+        document.getElementById("info-borrower").textContent = session.borrower_name || "—";
+        expiresAtMs = Date.now() + (session.expires_in || 300) * 1000;
+        const total = session.expires_in || 300;
+        const fill = document.getElementById("expiry-fill");
+        const text = document.getElementById("expire-text");
+        setInterval(() => {
+          const rem = Math.max(0, expiresAtMs - Date.now());
+          const pct = rem / (total * 1000) * 100;
+          fill.style.width = pct + "%";
+          if (pct < 20) fill.classList.add("warning");
+          if (pct === 0) fill.classList.add("expired");
+          const s = Math.round(rem / 1000);
+          text.textContent = s > 0 ? `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")} remaining` : "Expired";
+        }, 1000);
+      } catch { document.getElementById("info-loan-id").textContent = "Session error"; }
     }
-    updateExpiry();
-    setInterval(updateExpiry, 1000);
+    loadSession();
 
-    // Drag & drop
-    let selectedFile = null;
     const dropZone = document.getElementById("drop-zone");
     const fileInput = document.getElementById("file-input");
     const uploadBtn = document.getElementById("upload-btn");
@@ -128,57 +476,113 @@
     dropZone.addEventListener("click", () => fileInput.click());
     dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
     dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      const f = e.dataTransfer.files[0];
-      if (f) setFile(f);
-    });
+    dropZone.addEventListener("drop", e => { e.preventDefault(); dropZone.classList.remove("dragover"); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
     fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
 
     function setFile(f) {
       selectedFile = f;
       dropZone.classList.add("file-chosen");
-      dropZone.querySelector("p").textContent = `✅ ${f.name} (${(f.size/1024).toFixed(1)} KB)`;
-      dropZone.querySelector(".hint").textContent = "Click to choose a different file";
+      document.getElementById("drop-fa-icon").className = "fa-solid fa-circle-check";
+      document.getElementById("drop-title").textContent = "Ready to upload";
+      document.getElementById("drop-sub").textContent = "Click to choose a different file";
+      document.getElementById("file-name").textContent = f.name;
+      document.getElementById("file-size").textContent = `${(f.size/1024).toFixed(1)} KB · PDF`;
+      document.getElementById("file-chip").classList.add("visible");
       uploadBtn.disabled = false;
     }
 
-    // Upload
-    uploadBtn.addEventListener("click", async () => {
-      if (!selectedFile || !action) return;
-      uploadBtn.disabled = true;
-      const status = document.getElementById("status");
-      const progressWrap = document.getElementById("progress-wrap");
-      const progressBar = document.getElementById("progress-bar");
-      status.className = "status loading";
-      status.textContent = "Uploading...";
-      progressWrap.style.display = "block";
+    function setStatus(msg, type) {
+      const el = document.getElementById("status-text");
+      el.textContent = msg;
+      el.className = "status-text visible" + (type ? " " + type : "");
+    }
 
-      const formData = new FormData();
-      for (const [k, v] of Object.entries(fields)) formData.append(k, v);
-      formData.append("file", selectedFile);
+    uploadBtn.addEventListener("click", async () => {
+      if (!selectedFile || !session) { setStatus(session ? "No file selected." : "Session error — refresh the page.", "error"); return; }
+      if (expiresAtMs > 0 && Date.now() > expiresAtMs) { setStatus("Link expired. Request a new one.", "error"); return; }
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "Uploading…";
+      setStatus("Uploading securely…");
+      const track = document.getElementById("progress-track");
+      const fill = document.getElementById("progress-fill");
+      track.classList.add("visible");
+
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(session.fields)) fd.append(k, v);
+      fd.append("file", selectedFile);
 
       try {
         const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener("progress", e => {
-          if (e.lengthComputable) progressBar.style.width = (e.loaded / e.total * 100) + "%";
+        xhr.upload.addEventListener("progress", e => { if (e.lengthComputable) fill.style.width = (e.loaded/e.total*100) + "%"; });
+        await new Promise((res, rej) => {
+          xhr.onload = () => (xhr.status === 204 || xhr.status === 200) ? res() : rej(new Error(`HTTP ${xhr.status}: ${xhr.responseText || ""}`));
+          xhr.onerror = () => rej(new Error(`Network error (${session.action})`));
+          xhr.open("POST", session.action);
+          xhr.send(fd);
         });
-        await new Promise((resolve, reject) => {
-          xhr.onload = () => xhr.status === 204 || xhr.status === 200 ? resolve() : reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
-          xhr.onerror = () => reject(new Error("Network error"));
-          xhr.open("POST", action);
-          xhr.send(formData);
-        });
-        progressBar.style.width = "100%";
-        status.className = "status success";
-        status.textContent = `✅ Document uploaded successfully! Go back to your chat and tell the agent the upload is complete.`;
+        fill.style.width = "100%";
+        fill.classList.add("done");
+        uploadBtn.innerHTML = '<i class="fa-solid fa-check"></i> Uploaded';
+        uploadBtn.classList.add("done");
+
+        if (session.callback_url) {
+          setStatus("Running approval check…");
+          try {
+            const r = await fetch(session.callback_url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ jsonrpc: "2.0", method: "tools/call", id: 1, params: { name: "check_loan_approval", arguments: { loan_id: session.loan_id, document_type: selectedDocType, s3_key: session.s3_key } } }),
+            });
+            const j = await r.json();
+            const txt = j?.result?.content?.[0]?.text || null;
+            const v = txt ? JSON.parse(txt) : null;
+            if (!v) throw new Error();
+            showVerdict(v);
+            setStatus("Upload and approval check complete.", "success");
+          } catch { setStatus("Uploaded. Go back to chat to check approval.", "success"); }
+        } else {
+          setStatus("Uploaded successfully.", "success");
+        }
       } catch (err) {
-        status.className = "status error";
-        status.textContent = `❌ Upload failed: ${err.message}`;
+        const parseXML = m => { try { const x = m.match(/<\?xml[\s\S]*$/); if (!x) return m; const d = new DOMParser().parseFromString(x[0], "application/xml"); return (`${d.querySelector("Code")?.textContent || ""}: ${d.querySelector("Message")?.textContent || ""}`).trim() || m; } catch { return m; } };
+        setStatus("Upload failed: " + parseXML(err.message || "Unknown error"), "error");
         uploadBtn.disabled = false;
+        uploadBtn.textContent = "Upload Document";
+        uploadBtn.classList.remove("done");
+        fill.classList.remove("done");
       }
     });
+
+    function showVerdict(v) {
+      const decision = v.decision || "UNKNOWN";
+      const type = decision === "APPROVED" ? "success" : decision === "DENIED" ? "error" : "warning";
+      const label = decision === "APPROVED" ? "Approved" : decision === "DENIED" ? "Denied" : "Manual Review";
+      const icon = decision === "APPROVED" ? "fa-circle-check" : decision === "DENIED" ? "fa-circle-xmark" : "fa-circle-exclamation";
+      const pct = Math.min(100, Math.round((v.score ?? 0) / (v.max_score || 100) * 100));
+
+      const rules = (v.rules_applied || []).map(r =>
+        `<div class="rule">
+          <span class="rule-name">${r.rule}</span>
+          <span class="rule-pts ${r.passed ? "pass" : "fail"}">${r.passed ? "+" + r.points : "—"}</span>
+        </div>`
+      ).join("");
+
+      document.getElementById("verdict-divider").classList.add("visible");
+      const panel = document.getElementById("verdict-panel");
+      panel.innerHTML = `
+        <div class="status-badge ${type}">
+          <i class="fa-solid ${icon}"></i>${label}
+        </div>
+        <div class="verdict-narrative">${v.narrative || ""}</div>
+        <div class="score-row">
+          <div class="score-track"><div class="score-fill ${type}" id="sbar" style="width:0%"></div></div>
+          <div class="score-num">${v.score ?? 0} / ${v.max_score ?? 100}</div>
+        </div>
+        <div class="rules">${rules}</div>`;
+      panel.classList.add("visible");
+      setTimeout(() => { const b = document.getElementById("sbar"); if (b) b.style.width = pct + "%"; }, 60);
+    }
   </script>
 </body>
 </html>

@@ -1,1 +1,1 @@
-awslabs.mcp-lambda-handler>=0.1.12
+awslabs.mcp-lambda-handler>=0.1.14

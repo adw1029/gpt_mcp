@@ -13,10 +13,18 @@ Parameters:
     Type: String
     Default: dev
     Description: Deployment stage (dev, prod)
+  McpApiUrl:
+    Type: String
+    Default: ""
+    Description: >
+      MCP API Gateway URL (e.g. https://xxxx.execute-api.us-east-2.amazonaws.com/mcp).
+      Leave blank on first deploy; fill in from Outputs on subsequent deploys.
 
 Resources:
   LoanOverviewTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub gpt-mcp-loan-overview-${Stage}
       BillingMode: PAY_PER_REQUEST
@@ -38,6 +46,8 @@ Resources:
 
   ClientProfileTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub gpt-mcp-client-profile-${Stage}
       BillingMode: PAY_PER_REQUEST
@@ -77,8 +87,27 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  LoanApplicationTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub gpt-mcp-loan-application-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
   LoanDocumentsBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub gpt-mcp-loan-documents-${Stage}-${AWS::AccountId}
       PublicAccessBlockConfiguration:
@@ -110,7 +139,9 @@ Resources:
           - Effect: Allow
             Principal: "*"
             Action: s3:GetObject
-            Resource: !Sub ${LoanDocumentsBucket.Arn}/upload.html
+            Resource:
+              - !Sub ${LoanDocumentsBucket.Arn}/upload.html
+              - !Sub ${LoanDocumentsBucket.Arn}/sessions/*
 
   McpServerFunction:
     Type: AWS::Serverless::Function
@@ -118,7 +149,7 @@ Resources:
       FunctionName: !Sub gpt-mcp-server-${Stage}
       Handler: handler.lambda_handler
       CodeUri: src/
-      Description: MCP server exposing get_loan_overview, lookup_loan_document_extraction, and get_client_profile for GPT
+      Description: MCP server exposing loan tools, approval engine, and DMX application workflow
       Role: arn:aws:iam::730784326723:role/PrajnaMicroAgent_Lambda_Execution_Role
       Environment:
         Variables:
@@ -126,6 +157,8 @@ Resources:
           LOAN_OVERVIEW_TABLE: !Ref LoanOverviewTable
           CLIENT_PROFILE_TABLE: !Ref ClientProfileTable
           LOAN_DOCUMENTS_BUCKET: !Ref LoanDocumentsBucket
+          LOAN_APPLICATION_TABLE: !Ref LoanApplicationTable
+          MCP_API_URL: !Ref McpApiUrl
       Events:
         McpApi:
           Type: HttpApi
@@ -180,3 +213,8 @@ Outputs:
     Value: !GetAtt LoanDocumentsBucket.WebsiteURL
     Export:
       Name: !Sub ${AWS::StackName}-LoanDocumentsBucketWebsiteUrl
+  LoanApplicationTableName:
+    Description: DynamoDB table for DMX loan application sessions
+    Value: !Ref LoanApplicationTable
+    Export:
+      Name: !Sub ${AWS::StackName}-LoanApplicationTable

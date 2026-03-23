@@ -16,6 +16,8 @@ samconfig.toml
 .env
 .env.local
 *.pem
+okta-config.json
+*-config.json
 
 # IDE
 .idea/

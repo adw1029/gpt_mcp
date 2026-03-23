@@ -12,6 +12,53 @@ from decimal import Decimal
 
 FAKE_PROFILES = [
     {
+        "borrower_id": "rivera-alex-t",
+        "loan_id": "123456789",
+        "guid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "borrower_first_name": "Alex",
+        "borrower_last_name": "Rivera",
+        "personal_background": (
+            "Alex is a marketing director at a regional healthcare company in Scottsdale, AZ. "
+            "First-time homebuyer purchasing a detached single-family home. Very responsive "
+            "and comes well-prepared with documentation. Prefers phone calls over email. "
+            "Strong W-2 income history, no gaps in employment over the past 7 years. "
+            "Good credit with one older derogatory mark that has since been resolved."
+        ),
+        "loan_history": [
+            {
+                "loan_id": "123456789",
+                "purpose": "Purchase",
+                "amount": Decimal("320000"),
+                "status": "In Progress",
+                "property_address": "55 Cactus Rd, Scottsdale, AZ 85251",
+                "year": 2025,
+            }
+        ],
+        "reviews": [
+            {
+                "reviewer": "Jane Smith",
+                "rating": Decimal("5"),
+                "comment": (
+                    "Alex was extremely easy to work with. All docs were submitted ahead of "
+                    "schedule and he followed up proactively. Would absolutely work with him again."
+                ),
+                "date": "2025-02-10",
+                "tags": ["organized", "proactive", "responsive"],
+            },
+            {
+                "reviewer": "Tom Nguyen",
+                "rating": Decimal("4"),
+                "comment": (
+                    "Great borrower overall. The older derogatory mark needed a written "
+                    "explanation letter but Alex handled it quickly with no pushback."
+                ),
+                "date": "2025-01-28",
+                "tags": ["cooperative", "first-time-buyer"],
+            },
+        ],
+        "overall_rating": "4.5",
+    },
+    {
         "borrower_id": "homeowner-john-a",
         "loan_id": "265561631",
         "guid": "4707ee03-e10d-4792-840f-eb871db8dfd4",
