@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  gr-gpt-customer — Public borrower-facing MCP server.
+  Exposes 12 tools covering loan products, rate quotes, eligibility,
+  loan status, conditions, rate lock, closing, escrow, servicing, and LO contact.
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, prod)
+
+Resources:
+
+  BorrowerPortalTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub gr-borrower-portal-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: loan_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: loan_id
+          KeyType: HASH
+
+  McpServerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub gr-gpt-customer-${Stage}
+      Handler: handler.lambda_handler
+      CodeUri: src/
+      Description: >
+        Public borrower MCP — rate quotes, loan status, conditions,
+        closing details, rate lock, escrow, servicing, and LO contact.
+      Role: arn:aws:iam::730784326723:role/PrajnaMicroAgent_Lambda_Execution_Role
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          BORROWER_PORTAL_TABLE: !Ref BorrowerPortalTable
+      Events:
+        McpApi:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: ANY
+            ApiId: !Ref McpHttpApi
+        UploadPage:
+          Type: HttpApi
+          Properties:
+            Path: /upload
+            Method: GET
+            ApiId: !Ref McpHttpApi
+
+  McpHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub gr-gpt-customer-api-${Stage}
+      Description: >
+        Public HTTP API for the borrower-facing MCP.
+        Use this URL as server_url in the customer-facing GPT.
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - "*"
+
+Outputs:
+  McpApiUrl:
+    Description: Borrower MCP URL — use this as server_url in the customer-facing GPT
+    Value: !Sub https://${McpHttpApi}.execute-api.${AWS::Region}.amazonaws.com/mcp
+    Export:
+      Name: !Sub ${AWS::StackName}-McpApiUrl
+
+  McpServerFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt McpServerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FunctionArn
+
+  BorrowerPortalTableName:
+    Description: >
+      DynamoDB table for borrower portal records.
+      Pass this value as BorrowerPortalTableName when deploying gr-gpt-officer.
+    Value: !Ref BorrowerPortalTable
+    Export:
+      Name: !Sub ${AWS::StackName}-BorrowerPortalTable
