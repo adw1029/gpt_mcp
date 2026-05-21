@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  INTERNAL — gr-gpt-officer — Loan Officer MCP workstation.
+  Exposes 8 tools covering pipeline management, borrower profiles, pricing,
+  compliance, appraisal, closing/funding coordination, and analytics.
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, prod)
+
+  BorrowerPortalTableName:
+    Type: String
+    Default: ""
+    Description: >
+      Name of the BorrowerPortalTable from the gr-gpt-customer stack.
+      Leave blank to use the convention default (gr-borrower-portal-{Stage}).
+      Retrieve the actual value from gr-gpt-customer stack Outputs after deploying it first.
+
+Conditions:
+  BorrowerPortalTableProvided: !Not [!Equals [!Ref BorrowerPortalTableName, ""]]
+
+Resources:
+
+  LoPipelineTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub gr-lo-pipeline-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: lo_id
+          AttributeType: S
+        - AttributeName: lo_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: lo_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: lo_name-index
+          KeySchema:
+            - AttributeName: lo_name
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  McpServerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub gr-gpt-officer-${Stage}
+      Handler: handler.lambda_handler
+      CodeUri: src/
+      Description: >
+        INTERNAL — Loan Officer MCP workstation.
+        Pipeline, pricing, compliance, appraisal, closing/funding, and analytics.
+      Role: arn:aws:iam::730784326723:role/PrajnaMicroAgent_Lambda_Execution_Role
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          LO_PIPELINE_TABLE: !Ref LoPipelineTable
+          BORROWER_PORTAL_TABLE: !If
+            - BorrowerPortalTableProvided
+            - !Ref BorrowerPortalTableName
+            - !Sub gr-borrower-portal-${Stage}
+      Events:
+        McpApi:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: ANY
+            ApiId: !Ref McpHttpApi
+
+  McpHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub gr-gpt-officer-api-${Stage}
+      Description: >
+        INTERNAL HTTP API for the Loan Officer MCP workstation.
+        Use this URL as server_url in the internal LO GPT only.
+        Do NOT share this URL with borrowers.
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - "*"
+
+Outputs:
+  McpApiUrl:
+    Description: >
+      LO MCP URL — INTERNAL — use this as server_url in the LO GPT only.
+    Value: !Sub https://${McpHttpApi}.execute-api.${AWS::Region}.amazonaws.com/mcp
+    Export:
+      Name: !Sub ${AWS::StackName}-McpApiUrl
+
+  McpServerFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt McpServerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FunctionArn
+
+  LoPipelineTableName:
+    Description: DynamoDB table for LO pipeline records
+    Value: !Ref LoPipelineTable
+    Export:
+      Name: !Sub ${AWS::StackName}-LoPipelineTable
