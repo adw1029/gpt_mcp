@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  doc-intel Rate GPT: MCP server behind the Rate ChatGPT app (loan applications + status).
+  Runs as document_intelligence_role (stack doc-intel-iam-dev) and attaches its own inline policy.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, stage, prod]
+  IamStackName:
+    Type: String
+    Default: doc-intel-iam-dev
+    Description: Stack that exports document_intelligence_role
+  GatewayUrl:
+    Type: String
+    Default: https://partner-gateway-dev.dev.saas.rate.com/mcp/digital-mortgage-systems/tools
+  GatewayCompany:
+    Type: String
+    Default: owning
+  GatewayCompanyEid:
+    Type: Number
+    Default: 5
+    Description: Encompass company EID sent with create_loan
+  OktaTokenUrl:
+    Type: String
+    Default: https://gr.oktapreview.com/oauth2/aus2aagfx9cSr6Aag0h8/v1/token
+  OktaScope:
+    Type: String
+    Default: api.all.digital-mortgage-systems-mcp
+  # Borrower portal (MYA). Must match the gateway's environment: dev accounts and loans
+  # only exist in the dev portal. Production is https://my.owning.com/login.
+  PortalUrl:
+    Type: String
+    Default: https://my.dev.owning.com/login
+
+Resources:
+  # --- Okta client credentials (fill in after deploy; see README) -------------
+  OktaClientIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /doc-intel-rate-gpt/${Environment}/okta/client-id
+      Type: String
+      Value: REPLACE_ME
+      Description: Okta client ID for the DMS partner gateway (client_credentials)
+
+  # The secret was created by this stack as a String placeholder and then overwritten
+  # by hand as a SecureString (CloudFormation can't create SecureStrings). Retain keeps
+  # stack updates or deletes from ever removing it. Next step: drop this resource from
+  # the template once the Retain policy is deployed, so the stack stops tracking it.
+  OktaClientSecretParam:
+    Type: AWS::SSM::Parameter
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub /doc-intel-rate-gpt/${Environment}/okta/client-secret
+      Type: String
+      Value: REPLACE_ME
+      Description: Okta client secret. Overwrite as SecureString after deploy.
+
+  # --- Storage -----------------------------------------------------------------
+  ApplicationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub doc-intel-rate-gpt-${Environment}-applications
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  # Shared token cache, same shape as document_extraction_doc_validator_okta_tokens.
+  # Retained so deleting this stack never removes tokens other projects may rely on.
+  TokensTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: document_extraction_tokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: name
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  McpLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/doc-intel-rate-gpt-${Environment}-mcp
+      RetentionInDays: 30
+
+  # --- Permissions: inline policy on the shared role -----------------------------
+  RolePolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName:
+        Fn::ImportValue: !Sub ${IamStackName}-RoleName
+      PolicyName: !Sub doc-intel-rate-gpt-${Environment}
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: OwnLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub ${McpLogGroup.Arn}
+          - Sid: ApplicationsTable
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:Query
+              - dynamodb:ConditionCheckItem
+            Resource: !GetAtt ApplicationsTable.Arn
+          - Sid: TokenCache
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+            Resource: !GetAtt TokensTable.Arn
+          - Sid: OktaCredentials
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/doc-intel-rate-gpt/${Environment}/okta/*
+          - Sid: DecryptSecureStringViaSsm
+            Effect: Allow
+            Action: kms:Decrypt
+            Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+
+  # --- MCP server ------------------------------------------------------------------
+  # Third-party dependencies (mcp, httpx, mangum). Lambda unpacks the layer's python/
+  # folder to /opt/python, which is on sys.path, so no PYTHONPATH change is needed.
+  # SAM only publishes a new version when the layer's contents change.
+  DepsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub doc-intel-rate-gpt-${Environment}-deps
+      Description: Rate GPT MCP server dependencies
+      ContentUri: ../.build/layer
+      CompatibleRuntimes: [python3.13]
+      CompatibleArchitectures: [x86_64]
+
+  McpFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: [RolePolicy, McpLogGroup]
+    Properties:
+      FunctionName: !Sub doc-intel-rate-gpt-${Environment}-mcp
+      Description: Rate GPT MCP server (Streamable HTTP, stateless)
+      CodeUri: ../.build/function
+      Handler: rate_gpt.lambda_handler.handler
+      Layers: [!Ref DepsLayer]
+      Runtime: python3.13
+      Architectures: [x86_64]
+      MemorySize: 512
+      Timeout: 29
+      Role:
+        Fn::ImportValue: !Sub ${IamStackName}-RoleArn
+      Environment:
+        Variables:
+          RATE_GPT_MODULES: applications,status,accounts
+          RATE_GPT_DATA_BACKEND: dynamodb
+          RATE_GPT_APPLICATIONS_TABLE: !Ref ApplicationsTable
+          RATE_GPT_LOS_BACKEND: gateway
+          RATE_GPT_GATEWAY_URL: !Ref GatewayUrl
+          RATE_GPT_GATEWAY_COMPANY: !Ref GatewayCompany
+          RATE_GPT_GATEWAY_COMPANY_EID: !Ref GatewayCompanyEid
+          RATE_GPT_OKTA_TOKEN_URL: !Ref OktaTokenUrl
+          RATE_GPT_OKTA_SCOPE: !Ref OktaScope
+          RATE_GPT_OKTA_CLIENT_ID_PARAM: !Ref OktaClientIdParam
+          RATE_GPT_OKTA_CLIENT_SECRET_PARAM: !Sub /doc-intel-rate-gpt/${Environment}/okta/client-secret
+          RATE_GPT_TOKEN_TABLE: !Ref TokensTable
+          RATE_GPT_TOKEN_CACHE_KEY: !Sub doc-intel-rate-gpt/${Environment}/okta/digital-mortgage-systems-mcp
+          RATE_GPT_PORTAL_URL: !Ref PortalUrl
+      Events:
+        Mcp:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: ANY
+      Tags:
+        Product: doc-intel-rate-gpt
+        Environment: !Ref Environment
+
+Outputs:
+  McpUrl:
+    Description: MCP endpoint to add as a ChatGPT connector
+    Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/mcp
+  FunctionName:
+    Value: !Ref McpFunction
+  ApplicationsTableName:
+    Value: !Ref ApplicationsTable
+  TokensTableName:
+    Value: !Ref TokensTable
+  OktaClientIdParamName:
+    Value: !Ref OktaClientIdParam
+  OktaClientSecretParamName:
+    Value: !Sub /doc-intel-rate-gpt/${Environment}/okta/client-secret

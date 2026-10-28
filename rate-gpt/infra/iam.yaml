@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Shared document_intelligence_role for doc-intel Lambdas (mirrors the prod SaaS role).
+  Carries no permissions of its own; each project stack attaches its own inline policy.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, stage, prod]
+
+Resources:
+  DocumentIntelligenceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: document_intelligence_role
+      Description: Allows Lambda functions to call AWS services on your behalf.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      # Required by the account guardrails: role creation is denied without both.
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/permissions-manager/MachineLearning_PermissionsBoundary
+      Tags:
+        - Key: PermissionsBoundary
+          Value: MachineLearning_PermissionsBoundary
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  RoleName:
+    Value: !Ref DocumentIntelligenceRole
+    Export:
+      Name: !Sub ${AWS::StackName}-RoleName
+  RoleArn:
+    Value: !GetAtt DocumentIntelligenceRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-RoleArn

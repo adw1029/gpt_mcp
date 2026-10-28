@@ -1,0 +1,32 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# AWS SAM
+.aws-sam/
+
+# Installers / binaries
+*.pkg
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+okta-config.json
+
+# Lambda bundle
+.build/

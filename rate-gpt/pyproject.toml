@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rate-gpt"
+version = "0.1.0"
+description = "Rate mortgage assistant — MCP server for ChatGPT apps"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=2.3,<3",
+    "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+# Deployed (Lambda) extras. boto3 ships with the Lambda runtime, so the build leaves it out.
+aws = ["boto3>=1.35", "mangum>=0.19"]
+dev = ["pytest>=8", "rate-gpt[aws]"]
+
+[project.scripts]
+rate-gpt = "rate_gpt.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rate_gpt = ["data/seed/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
